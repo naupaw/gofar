@@ -35,8 +35,19 @@ func executeQuery(query string, variables map[string]interface{}, operationName 
 	return result
 }
 
+var banner = `
+ _____         __
+/ ____|      /  _|
+| |  __  ___ | |_ ____ __
+| | |_ |/ _ \|  _/ _| __|
+| |__| | (_) | || (_|| |
+ \_____|\___/|_| \__,|_| v1.0.0
+
+`
+
 func main() {
 	e := echo.New()
+	e.HideBanner = true
 
 	schemaFile, err := os.Open("schema.yaml")
 	if err != nil {
@@ -88,6 +99,9 @@ func main() {
 		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
 	}))
 
+	fmt.Println(banner)
+	fmt.Println("--------------------------------------------")
+	fmt.Println("Using Driver MongoDB")
 	fmt.Println("--------------------------------------------")
 	fmt.Println("GQL Path at", "http://0.0.0.0"+definePort+mainSchema.GraphQL.Path)
 	fmt.Println("Playground Start at", "http://0.0.0.0"+definePort+mainSchema.GraphQL.Playground)

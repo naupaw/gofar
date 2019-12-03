@@ -9,33 +9,31 @@ type GraphQLConfig struct {
 	Path       string
 	Playground string
 }
+
+type Model map[string]interface{}
+
 type MainSchema struct {
-	Name        string                 `json:"name"`
-	Version     string                 `json:"version"`
-	GraphQL     GraphQLConfig          `json:"version" yaml:"graphql"`
-	Collections map[string]interface{} `json:"collections"`
-	Port        int                    `yaml:"port"`
+	Name    string           `json:"name"`
+	Version string           `json:"version"`
+	GraphQL GraphQLConfig    `json:"version" yaml:"graphql"`
+	Models  map[string]Model `json:"models"`
+	Port    int              `yaml:"port"`
 }
 
 var dataTypes map[string]*graphql.Object
 var kindType = map[string]string{}
 
-//Models models
-var Models map[string]interface{}
+//ModelLists lists of models
+var ModelLists map[string]Model
 
 //SchemaManager - initialize schema
 func SchemaManager(mainSchema MainSchema) graphql.Schema {
 	dataTypes = map[string]*graphql.Object{}
-
-	Models = mainSchema.Collections
-
+	ModelLists = mainSchema.Models
 	defineSchema()
-
-	q := makeQuery(mainSchema)
-
 	var schema, _ = graphql.NewSchema(
 		graphql.SchemaConfig{
-			Query: q,
+			Query: makeQuery(mainSchema),
 			// Mutation: mutationType,
 		},
 	)

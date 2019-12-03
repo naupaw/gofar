@@ -4,7 +4,7 @@ port: 3001
 graphql:
   path: /query
   playground: /__playground
-collections:
+models:
   User:
     email: string `unique:"true" validate:"require,unique"`
     phone: string `unique:"true" validate:"require,unique"`

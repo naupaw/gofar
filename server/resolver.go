@@ -6,55 +6,51 @@ import (
 	"strings"
 
 	"github.com/graphql-go/graphql"
-	"github.com/iancoleman/strcase"
 )
 
-// Query Resolver
-func resolver(modelName string, fields map[string]interface{}, p graphql.ResolveParams, parent string) map[string]interface{} {
-	fieldKeys := make([]string, 0, len(fields))
-	nestedFields := make([]string, 0, len(fields))
-	for key, typ := range fields {
-		if reflect.TypeOf(typ).String()[0:4] == "map[" {
-			nestedFields = append(nestedFields, key)
-		} else {
-			fieldKeys = append(fieldKeys, key)
-		}
+func resolve(fieldName string, param graphql.ResolveParams, fields map[string]interface{}, parentFieldName *string, parentFields *map[string]interface{}) (map[string]interface{}, error) {
+	fieldSet := map[string]bool{}
+	fieldKey := []string{}
+
+	id, _ := param.Args["ID"].(string)
+
+	if _, ok := fields["ID"]; !ok {
+		fields["ID"] = "string"
 	}
 
-	id, _ := p.Args["ID"].(string)
-
-	idField := "id"
-
-	// Run from parent only
-	if parent == "" {
-		fmt.Printf(
-			"RUN SYNTAX SELECT %s FROM %s WHERE %s = \"%s\" \n\n",
-			strings.Join(fieldKeys, ", "),
-			modelName,
-			idField,
-			id,
-		)
-		fmt.Printf(
-			"AND THEN RUN PROCEDURAL SCAN FOR NESTED FIELDS %s\n\n",
-			strings.Join(nestedFields, ", "),
-		)
-
-		// out, _ := json.Marshal(fields)
-
-		md := Models[strcase.ToCamel(modelName)].(map[interface{}]interface{})
-		for _, key := range fieldKeys {
-			if key == "ID" {
-				fields[key] = "string"
-			} else {
-				typeData, _ := getFieldTypeData(md[key].(string))
-				fields[key] = typeData
+	//Pre defined foreign Key
+	for name, typeData := range fields {
+		if reflect.TypeOf(typeData).String()[0:4] == "map[" {
+			foreignRow := name + "_ID"
+			fields[foreignRow] = "string"
+			if _, ok := fieldSet[foreignRow]; !ok {
+				fieldSet[foreignRow] = true
+				fieldKey = append(fieldKey, foreignRow)
+			}
+		} else {
+			if _, ok := fieldSet[name]; !ok {
+				fieldSet[name] = true
+				fieldKey = append(fieldKey, name)
 			}
 		}
-		for _, key := range nestedFields {
-			fields[key] = resolver(key, fields[key].(map[string]interface{}), p, parent)
-		}
-		// fmt.Println("Output", string(out))
 	}
 
-	return fields
+	//-------- EXECUTE DATABASE HERE -------------//
+	fmt.Printf("SELECT %s FROM %s WHERE id = \"%s\"\n\n", strings.Join(fieldKey, ", "), fieldName, id)
+	//------- END ---------------//
+
+	for name, typeData := range fields {
+		if reflect.TypeOf(typeData).String()[0:4] == "map[" {
+			fieldValue, _ := resolve(name, param, typeData.(map[string]interface{}), &fieldName, &fields)
+			fields[name] = fieldValue
+		} else {
+			// FILTER OPT
+			_, opt := getFieldTypeData(fields[name].(string))
+			if _, ok := opt["hide"]; ok {
+				fields[name] = nil
+			}
+		}
+	}
+
+	return fields, nil
 }

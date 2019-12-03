@@ -25,7 +25,7 @@ database:
   username: admin
   password: admin
   database: toko-kaset
-collections:
+models:
   User:
     email: string
     phone: string

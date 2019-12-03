@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 
 	ast "github.com/graphql-go/graphql/language/ast"
 
@@ -36,10 +37,8 @@ func makeFieldList(name string, data graphql.Output) graphql.Output {
 }
 
 //https://github.com/graphql-go/graphql/issues/157#issuecomment-506439064
-func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, selections []ast.Selection, parent string) (selected map[string]interface{}, err error) {
+func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, selections []ast.Selection, parent bool) (selected map[string]interface{}, err error) {
 	selected = map[string]interface{}{}
-
-	// selected["role_ID"] = "702cd450-15a6-11ea-8d71-362b9e155667" //Always set ID
 
 	for _, s := range selections {
 		switch s := s.(type) {
@@ -50,7 +49,7 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 				}
 			} else {
 				//@todo must have s.Name.Value_id
-				selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, s.SelectionSet.Selections, fieldName)
+				selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, s.SelectionSet.Selections, false)
 				if err != nil {
 					return
 				}
@@ -62,7 +61,7 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 				err = fmt.Errorf("no fragment found with name %v", n)
 				return
 			}
-			selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, frag.GetSelectionSet().Selections, fieldName)
+			selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, frag.GetSelectionSet().Selections, false)
 			if err != nil {
 				return
 			}
@@ -72,12 +71,15 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 		}
 	}
 
-	resolver(fieldName, selected, p, parent)
+	preResolver(fieldName, selected, p, true)
 
-	// for name := range selected {
-	// 	selected[s.Name.Value]
-	// 	fmt.Println("PROCESSED fields", fieldName, name)
-	// }
+	if parent == true {
+		// jsn, _ := json.Marshal(selected)
+		// for name := range selected {
+		selected, _ = resolve(fieldName, p, selected, nil, nil)
+		// fmt.Println(string(jsn))
+		// }
+	}
 
 	return
 }
@@ -89,8 +91,39 @@ func makeResolve(fields *graphql.Object) graphql.FieldResolveFn {
 			return nil, fmt.Errorf("ResolveParams has no fields")
 		}
 		fieldName := fieldASTs[0].Name.Value
-		return selectedFieldsFromSelections(p, fieldName, fieldASTs[0].SelectionSet.Selections, "")
+		return selectedFieldsFromSelections(p, fieldName, fieldASTs[0].SelectionSet.Selections, true)
 	}
+}
+
+// Query Resolver
+func preResolver(modelName string, fields map[string]interface{}, p graphql.ResolveParams, parent bool) map[string]interface{} {
+	fieldKeys := make([]string, 0, len(fields))
+	nestedFields := make([]string, 0, len(fields))
+	for key, typ := range fields {
+		if reflect.TypeOf(typ).String()[0:4] == "map[" {
+			nestedFields = append(nestedFields, key)
+		} else {
+			fieldKeys = append(fieldKeys, key)
+		}
+	}
+
+	// Run from parent only
+	if parent == true {
+		md := ModelLists[strcase.ToCamel(modelName)]
+		for _, key := range fieldKeys {
+			if key == "ID" {
+				fields[key] = "string"
+			} else {
+				fields[key] = md[key].(string)
+			}
+		}
+
+		for _, key := range nestedFields {
+			fields[key] = preResolver(key, fields[key].(map[string]interface{}), p, false)
+		}
+	}
+
+	return fields
 }
 
 func makeCollection(col graphql.Fields) graphql.Fields {
@@ -182,9 +215,9 @@ func makeQuery(schema MainSchema) *graphql.Object {
 }
 
 func defineSchema() {
-	for name, fields := range Models {
+	for name, fields := range ModelLists {
 		if _, ok := dataTypes[name]; ok == false {
-			makeModel(name, fields.(map[interface{}]interface{}), 1)
+			makeModel(name, fields)
 		}
 	}
 }
