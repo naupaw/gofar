@@ -57,8 +57,8 @@ func makeModel(modelName string, fields map[interface{}]interface{}, depth int) 
 	log.Println(":: Initialize", modelName)
 }
 
-func getTypeData(typeData string, subType *string, depth int) graphql.Output {
-
+func getFieldTypeData(typeData string) (outputType string, opt map[string]string) {
+	opt = map[string]string{}
 	//Golang doesn't support backtick (`) escape right now :(
 	rule := `(^[A-Za-z0-9]+)\s+`
 	rule2 := `(.+)`
@@ -67,7 +67,7 @@ func getTypeData(typeData string, subType *string, depth int) graphql.Output {
 	var res = regex.FindStringSubmatch(typeData)
 
 	if len(res) > 2 {
-		fmt.Printf("typeData=%s prop=%s\n\n", res[1], res[2])
+		// fmt.Printf("typeData=%s prop=%s\n\n", res[1], res[2])
 		result, err := tagparser.Parse(res[2], true)
 		if err != nil {
 			log.Fatalf("unexpected error has come: %s", err)
@@ -76,9 +76,15 @@ func getTypeData(typeData string, subType *string, depth int) graphql.Output {
 		for f, prop := range result {
 			fmt.Println(f, prop)
 		}
-
-		typeData = res[1]
+		return res[1], result
 	}
+	return typeData, opt
+}
+
+func getTypeData(typeData string, subType *string, depth int) graphql.Output {
+
+	//Golang doesn't support backtick (`) escape right now :(
+	typeData, _ = getFieldTypeData(typeData)
 
 	switch typeData {
 	case "string":
@@ -90,7 +96,7 @@ func getTypeData(typeData string, subType *string, depth int) graphql.Output {
 	case "slice":
 		return graphql.NewList(getTypeData(*subType, nil, depth))
 	default:
-		if fields, ok := models[typeData]; ok {
+		if fields, ok := Models[typeData]; ok {
 			if _, ok := dataTypes[typeData]; !ok {
 				makeModel(typeData, fields.(map[interface{}]interface{}), depth)
 				return dataTypes[typeData]

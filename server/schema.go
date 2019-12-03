@@ -20,13 +20,14 @@ type MainSchema struct {
 var dataTypes map[string]*graphql.Object
 var kindType = map[string]string{}
 
-var models map[string]interface{}
+//Models models
+var Models map[string]interface{}
 
 //SchemaManager - initialize schema
 func SchemaManager(mainSchema MainSchema) graphql.Schema {
 	dataTypes = map[string]*graphql.Object{}
 
-	models = mainSchema.Collections
+	Models = mainSchema.Collections
 
 	defineSchema()
 
