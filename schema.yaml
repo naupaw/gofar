@@ -1,0 +1,41 @@
+name: Toko Kaset Hilman
+version: v1.0.0
+port: 3001
+graphql:
+  path: /query
+  playground: /__playground
+collections:
+  User:
+    email: string
+    phone: string
+    password: string
+    role: Role
+    __options:
+      module_auth: true
+  Role:
+    name: string
+    slug: string
+    users:
+      - User
+  Song:
+    title: string
+    length: number
+    band: Band
+    album: Album
+  Album:
+    name: string
+    year: number
+    band: Band
+    songs:
+      - Song
+    tags:
+      - string
+  Artist:
+    name: string
+    Band: Band
+  Band:
+    name: string
+    artists:
+      - Artist
+    albums:
+      - Album

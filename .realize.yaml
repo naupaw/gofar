@@ -1,0 +1,23 @@
+settings:
+  legacy:
+    force: false
+    interval: 0s
+schema:
+  - name: server
+    path: server
+    commands:
+      run:
+        status: true
+    watcher:
+      extensions:
+        - go
+        - yaml
+      paths:
+        - /
+        - ../
+      ignore:
+        paths:
+          - .git
+          - .realize
+          - vendor
+          - client
