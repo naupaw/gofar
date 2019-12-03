@@ -17,7 +17,7 @@ import (
 )
 
 type GqlParam struct {
-	Query         string                 `json:"query"`
+	Query         string                 `json:"query" yaml:"query"`
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
 }

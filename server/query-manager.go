@@ -1,54 +1,13 @@
 package main
 
 import (
-	"log"
-	"reflect"
+	"fmt"
+
+	ast "github.com/graphql-go/graphql/language/ast"
 
 	"github.com/graphql-go/graphql"
 	"github.com/iancoleman/strcase"
 )
-
-func makeModel(name string, fields map[interface{}]interface{}, depth int) {
-	objectFields := graphql.Fields{}
-	gqlType := graphql.NewObject(
-		graphql.ObjectConfig{
-			Name:   name,
-			Fields: objectFields,
-		},
-	)
-	dataTypes[name] = gqlType
-
-	objectFields["ID"] = &graphql.Field{
-		Type: getTypeData("string", nil, depth+1),
-	}
-
-	for field, typeData := range fields {
-		fieldName := strcase.ToLowerCamel(field.(string))
-		if field.(string)[0:2] != "__" {
-			v := reflect.ValueOf(typeData)
-			switch v.Kind() {
-			case reflect.Slice:
-				s := reflect.ValueOf(typeData)
-				subtype := s.Index(0).Interface().(string)
-				td := getTypeData("slice", &subtype, depth+1)
-				if td != nil {
-					objectFields[fieldName] = &graphql.Field{
-						Type: td,
-					}
-				}
-			default:
-				td := getTypeData(v.String(), nil, depth+1)
-				if td != nil {
-					objectFields[fieldName] = &graphql.Field{
-						Type: td,
-					}
-				}
-			}
-		}
-	}
-
-	log.Println(":: Initialize", name)
-}
 
 func makeFieldList(name string, data graphql.Output) graphql.Output {
 	objectFields := graphql.Fields{
@@ -76,6 +35,81 @@ func makeFieldList(name string, data graphql.Output) graphql.Output {
 	)
 }
 
+func resolveFields(fields *graphql.Object, p graphql.ResolveParams) (map[string]interface{}, error) {
+	fieldASTs := p.Info.FieldASTs
+	if len(fieldASTs) == 0 {
+		return nil, fmt.Errorf("getSelectedFields: ResolveParams has no fields")
+	}
+	fieldName := fieldASTs[0].Name.Value
+	return selectedFieldsFromSelections(p, fieldName, fieldASTs[0].SelectionSet.Selections)
+}
+
+//https://github.com/graphql-go/graphql/issues/157#issuecomment-506439064
+func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, selections []ast.Selection) (selected map[string]interface{}, err error) {
+	selected = map[string]interface{}{}
+	fmt.Println("fieldName", fieldName)
+
+	for _, s := range selections {
+		switch s := s.(type) {
+		case *ast.Field:
+			if s.SelectionSet == nil {
+				selected[s.Name.Value] = "the value that you want!"
+			} else {
+				selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, s.SelectionSet.Selections)
+				if err != nil {
+					return
+				}
+			}
+		case *ast.FragmentSpread:
+			n := s.Name.Value
+			frag, ok := p.Info.Fragments[n]
+			if !ok {
+				err = fmt.Errorf("getSelectedFields: no fragment found with name %v", n)
+				return
+			}
+			selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, frag.GetSelectionSet().Selections)
+			if err != nil {
+				return
+			}
+		default:
+			err = fmt.Errorf("getSelectedFields: found unexpected selection type %v", s)
+			return
+		}
+	}
+
+	// for name := range selected {
+	// 	selected[s.Name.Value]
+	// 	fmt.Println("PROCESSED fields", fieldName, name)
+	// }
+
+	return
+}
+
+func makeResolve(fields *graphql.Object) graphql.FieldResolveFn {
+	return func(p graphql.ResolveParams) (res interface{}, err error) {
+
+		// if len(fieldASTs) == 0 {
+		// 	return nil, fmt.Errorf("getSelectedFields: ResolveParams has no fields")
+		// }
+		// selections := fieldASTs[0].SelectionSet.Selections
+
+		// for _, s := range selections {
+		// 	switch s := s.(type) {
+		// 	case *ast.Field:
+		// 		fmt.Println("FIELDS", s.Name.Value)
+		// 		// if s.SelectionSet == nil {
+		// 		// } else {
+		// 		// 	fmt.Println("FIELD", s.SelectionSet.Selections)
+		// 		// }
+		// 	}
+		// }
+		return resolveFields(fields, p)
+		// return map[string]interface{}{
+		// 	"ID": "jsad781n2k3jncz8x-asdjnui13hn-123unc9aus9d",
+		// }, nil
+	}
+}
+
 func makeCollection(col graphql.Fields) graphql.Fields {
 	for collection, fields := range dataTypes {
 		collectionName := strcase.ToLowerCamel(collection)
@@ -87,11 +121,7 @@ func makeCollection(col graphql.Fields) graphql.Fields {
 					Type: graphql.NewNonNull(graphql.String),
 				},
 			},
-			Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
-				return map[string]interface{}{
-					"ID": "jsad781n2k3jncz8x-asdjnui13hn-123unc9aus9d",
-				}, nil
-			},
+			Resolve: makeResolve(fields),
 		}
 
 		col[collectionName+"List"] = &graphql.Field{
@@ -131,7 +161,6 @@ func makeCollection(col graphql.Fields) graphql.Fields {
 }
 
 func makeQuery(schema MainSchema) *graphql.Object {
-
 	aboutType := graphql.NewObject(
 		graphql.ObjectConfig{
 			Name: "About",

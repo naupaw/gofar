@@ -6,15 +6,15 @@ graphql:
   playground: /__playground
 collections:
   User:
-    email: string
-    phone: string
-    password: string
+    email: string `unique:"true" validate:"require,unique"`
+    phone: string `unique:"true" validate:"require,unique"`
+    password: string `validate:"require,min:10" hide:"true"`
     role: Role
     __options:
       module_auth: true
   Role:
     name: string
-    slug: string
+    slug: string `unique:"true" validate:"require,unique"`
     users:
       - User
   Song:

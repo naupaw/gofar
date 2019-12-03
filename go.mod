@@ -10,6 +10,7 @@ require (
 	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/labstack/gommon v0.3.0 // indirect
+	github.com/moznion/go-struct-custom-tag-parser v0.0.0-20190105140703-f014962a09f2
 	golang.org/x/crypto v0.0.0-20191128160524-b544559bb6d1 // indirect
 	gopkg.in/yaml.v2 v2.2.7
 )
