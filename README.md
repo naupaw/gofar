@@ -19,23 +19,17 @@ port: 3001
 graphql:
   path: /query
   playground: /__playground
-database:
-  driver: mongoDB
-  host: localhost
-  username: admin
-  password: admin
-  database: toko-kaset
 models:
   User:
-    email: string
-    phone: string
-    password: string
+    email: string `unique:"true" validate:"require,unique"`
+    phone: string `unique:"true" validate:"require,unique"`
+    password: string `validate:"require,min:10" hide:"true"`
     role: Role
     __options:
       module_auth: true
   Role:
     name: string
-    slug: string
+    slug: string `unique:"true" validate:"require,unique"`
     users:
       - User
   Song:
@@ -86,8 +80,9 @@ Sebenernya ini baru cuma berupa _Proof of Concept_ dimana kedepan nya akan ada b
 
 ## Beberapa modul go yang digunakan
 
-- github.com/labstack/echo
-- github.com/iancoleman/strcase
-- github.com/graphql-go/graphql
-- github.com/99designs/gqlgen
-- gopkg.in/yaml.v2
+- [github.com/labstack/echo](github.com/labstack/echo)
+- [github.com/iancoleman/strcase](github.com/iancoleman/strcase)
+- [github.com/graphql-go/graphql](github.com/graphql-go/graphql)
+- [github.com/99designs/gqlgen](github.com/99designs/gqlgen)
+- [github.com/moznion/go-struct-custom-tag-parser](github.com/moznion/go-struct-custom-tag-parser)
+- [gopkg.in/yaml.v2](gopkg.in/yaml.v2)

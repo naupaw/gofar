@@ -1,4 +1,4 @@
-package main
+package schema
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ func makeFieldList(name string, data graphql.Output) graphql.Output {
 }
 
 //https://github.com/graphql-go/graphql/issues/157#issuecomment-506439064
-func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, selections []ast.Selection, parent bool) (selected map[string]interface{}, err error) {
+func (schema Schema) selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, selections []ast.Selection, parent bool) (selected map[string]interface{}, err error) {
 	selected = map[string]interface{}{}
 
 	for _, s := range selections {
@@ -49,7 +49,7 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 				}
 			} else {
 				//@todo must have s.Name.Value_id
-				selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, s.SelectionSet.Selections, false)
+				selected[s.Name.Value], err = schema.selectedFieldsFromSelections(p, s.Name.Value, s.SelectionSet.Selections, false)
 				if err != nil {
 					return
 				}
@@ -61,7 +61,7 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 				err = fmt.Errorf("no fragment found with name %v", n)
 				return
 			}
-			selected[s.Name.Value], err = selectedFieldsFromSelections(p, s.Name.Value, frag.GetSelectionSet().Selections, false)
+			selected[s.Name.Value], err = schema.selectedFieldsFromSelections(p, s.Name.Value, frag.GetSelectionSet().Selections, false)
 			if err != nil {
 				return
 			}
@@ -71,12 +71,12 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 		}
 	}
 
-	preResolver(fieldName, selected, p, true)
+	schema.preResolver(fieldName, selected, p, true)
 
 	if parent == true {
 		// jsn, _ := json.Marshal(selected)
 		// for name := range selected {
-		selected, _ = resolve(fieldName, p, selected, nil, nil)
+		selected, _ = schema.resolve(fieldName, p, selected, nil, nil)
 		// fmt.Println(string(jsn))
 		// }
 	}
@@ -84,19 +84,20 @@ func selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, sel
 	return
 }
 
-func makeResolve(fields *graphql.Object) graphql.FieldResolveFn {
+//makeResolve make resolve functions
+func (schema Schema) makeResolve(fields *graphql.Object) graphql.FieldResolveFn {
 	return func(p graphql.ResolveParams) (res interface{}, err error) {
 		fieldASTs := p.Info.FieldASTs
 		if len(fieldASTs) == 0 {
 			return nil, fmt.Errorf("ResolveParams has no fields")
 		}
 		fieldName := fieldASTs[0].Name.Value
-		return selectedFieldsFromSelections(p, fieldName, fieldASTs[0].SelectionSet.Selections, true)
+		return schema.selectedFieldsFromSelections(p, fieldName, fieldASTs[0].SelectionSet.Selections, true)
 	}
 }
 
 // Query Resolver
-func preResolver(modelName string, fields map[string]interface{}, p graphql.ResolveParams, parent bool) map[string]interface{} {
+func (schema Schema) preResolver(modelName string, fields map[string]interface{}, p graphql.ResolveParams, parent bool) map[string]interface{} {
 	fieldKeys := make([]string, 0, len(fields))
 	nestedFields := make([]string, 0, len(fields))
 	for key, typ := range fields {
@@ -109,40 +110,43 @@ func preResolver(modelName string, fields map[string]interface{}, p graphql.Reso
 
 	// Run from parent only
 	if parent == true {
-		md := ModelLists[strcase.ToCamel(modelName)]
+		md := schema.Models[modelName] //\.(map[string]interface{})
 		for _, key := range fieldKeys {
 			if key == "ID" {
 				fields[key] = "string"
 			} else {
-				fields[key] = md[key].(string)
+				if _, ok := md[key]; ok {
+					fields[key] = md[key].(map[string]interface{})["type"].(string)
+				}
 			}
 		}
 
 		for _, key := range nestedFields {
-			fields[key] = preResolver(key, fields[key].(map[string]interface{}), p, false)
+			fields[key] = schema.preResolver(key, fields[key].(map[string]interface{}), p, false)
 		}
 	}
-
 	return fields
 }
 
-func makeCollection(col graphql.Fields) graphql.Fields {
-	for collection, fields := range dataTypes {
-		collectionName := strcase.ToLowerCamel(collection)
-		col[collectionName] = &graphql.Field{
-			Description: collectionName + " Single data",
-			Type:        fields,
+func (schema Schema) makeQueryFields() {
+	for modelName, graphQLField := range schema.GraphQLModels {
+		// Single Node
+		fmt.Println("MM", modelName)
+		schema.queryFields[modelName] = &graphql.Field{
+			Description: modelName + " Single data",
+			Type:        graphQLField,
 			Args: graphql.FieldConfigArgument{
 				"ID": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
 				},
 			},
-			Resolve: makeResolve(fields),
+			Resolve: schema.makeResolve(graphQLField),
 		}
 
-		col[collectionName+"List"] = &graphql.Field{
-			Description: collectionName + " Datasets",
-			Type:        makeFieldList(collection, fields),
+		// Paging Node
+		schema.queryFields[modelName+"List"] = &graphql.Field{
+			Description: modelName + " Datasets",
+			Type:        makeFieldList(modelName, graphQLField),
 			Args: graphql.FieldConfigArgument{
 				"page": &graphql.ArgumentConfig{
 					Type: graphql.Int,
@@ -172,12 +176,10 @@ func makeCollection(col graphql.Fields) graphql.Fields {
 		}
 
 	}
-
-	return col
 }
 
-func makeQuery(schema MainSchema) *graphql.Object {
-	aboutType := graphql.NewObject(
+func (schema Schema) makeQuery() *graphql.Object {
+	schema.GraphQLModels["aboutType"] = graphql.NewObject(
 		graphql.ObjectConfig{
 			Name: "About",
 			Fields: graphql.Fields{
@@ -191,33 +193,23 @@ func makeQuery(schema MainSchema) *graphql.Object {
 		},
 	)
 
-	collections := graphql.Fields{
-		"about": &graphql.Field{
-			Description: "Tentang aplikasi ini",
-			Type:        aboutType,
-			Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
-				return map[string]interface{}{
-					"version": schema.Version,
-					"name":    schema.Name,
-				}, nil
-			},
+	schema.queryFields["about"] = &graphql.Field{
+		Description: "Tentang aplikasi ini",
+		Type:        schema.GraphQLModels["aboutType"],
+		Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
+			return map[string]interface{}{
+				"version": schema.Version,
+				"name":    schema.Name,
+			}, nil
 		},
 	}
 
-	collections = makeCollection(collections)
+	schema.makeQueryFields()
 
 	return graphql.NewObject(
 		graphql.ObjectConfig{
 			Name:   "Query",
-			Fields: collections,
+			Fields: schema.queryFields,
 		},
 	)
-}
-
-func defineSchema() {
-	for name, fields := range ModelLists {
-		if _, ok := dataTypes[name]; ok == false {
-			makeModel(name, fields)
-		}
-	}
 }

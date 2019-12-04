@@ -11,28 +11,15 @@ import (
 	gqlGenHandler "github.com/99designs/gqlgen/handler"
 	"github.com/Rican7/conjson"
 	"github.com/Rican7/conjson/transform"
-	"github.com/graphql-go/graphql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	gschema "github.com/pedox/gofar/server/schema"
 )
 
 type GqlParam struct {
 	Query         string                 `json:"query" yaml:"query"`
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
-}
-
-func executeQuery(query string, variables map[string]interface{}, operationName string, schema graphql.Schema) *graphql.Result {
-	result := graphql.Do(graphql.Params{
-		Schema:         schema,
-		RequestString:  query,
-		OperationName:  operationName,
-		VariableValues: variables,
-	})
-	if len(result.Errors) > 0 {
-		fmt.Printf("errors: %v", result.Errors)
-	}
-	return result
 }
 
 var banner = `
@@ -55,12 +42,11 @@ func main() {
 	}
 	defer schemaFile.Close()
 	byteValue, _ := ioutil.ReadAll(schemaFile)
-	var mainSchema MainSchema
-	yaml.Unmarshal(byteValue, &mainSchema)
+	var schema gschema.Schema
+	yaml.Unmarshal(byteValue, &schema)
 
-	definePort := fmt.Sprintf(":%d", mainSchema.Port)
-
-	schema := SchemaManager(mainSchema)
+	definePort := fmt.Sprintf(":%d", schema.Port)
+	gqlSchema := schema.Initialize()
 
 	e.Use(middleware.BodyLimit("2M"))
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
@@ -73,15 +59,15 @@ func main() {
 		})
 	})
 
-	e.GET(mainSchema.GraphQL.Playground, echo.WrapHandler(gqlGenHandler.Playground("GraphQL playground", mainSchema.GraphQL.Path)))
+	e.GET(schema.GraphQL.Playground, echo.WrapHandler(gqlGenHandler.Playground("GraphQL playground", schema.GraphQL.Path)))
 
-	e.POST(mainSchema.GraphQL.Path, func(c echo.Context) (err error) {
+	e.POST(schema.GraphQL.Path, func(c echo.Context) (err error) {
 		f := new(GqlParam)
 		if err = c.Bind(f); err != nil {
 			return err
 		}
 
-		result := executeQuery(f.Query, f.Variables, f.OperationName, schema)
+		result := gschema.ExecuteQuery(f.Query, f.Variables, f.OperationName, gqlSchema)
 		return c.JSON(http.StatusOK, result)
 	})
 
@@ -103,8 +89,8 @@ func main() {
 	fmt.Println("--------------------------------------------")
 	fmt.Println("Using Driver MongoDB")
 	fmt.Println("--------------------------------------------")
-	fmt.Println("GQL Path at", "http://0.0.0.0"+definePort+mainSchema.GraphQL.Path)
-	fmt.Println("Playground Start at", "http://0.0.0.0"+definePort+mainSchema.GraphQL.Playground)
+	fmt.Println("GQL Path at", "http://0.0.0.0"+definePort+schema.GraphQL.Path)
+	fmt.Println("Playground Start at", "http://0.0.0.0"+definePort+schema.GraphQL.Playground)
 	fmt.Println("--------------------------------------------")
 
 	e.Logger.Fatal(e.Start(definePort))

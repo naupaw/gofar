@@ -1,4 +1,4 @@
-package main
+package schema
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/graphql-go/graphql"
 )
 
-func resolve(fieldName string, param graphql.ResolveParams, fields map[string]interface{}, parentFieldName *string, parentFields *map[string]interface{}) (map[string]interface{}, error) {
+func (schema Schema) resolve(fieldName string, param graphql.ResolveParams, fields map[string]interface{}, parentFieldName *string, parentFields *map[string]interface{}) (map[string]interface{}, error) {
 	fieldSet := map[string]bool{}
 	fieldKey := []string{}
 
@@ -41,13 +41,16 @@ func resolve(fieldName string, param graphql.ResolveParams, fields map[string]in
 
 	for name, typeData := range fields {
 		if reflect.TypeOf(typeData).String()[0:4] == "map[" {
-			fieldValue, _ := resolve(name, param, typeData.(map[string]interface{}), &fieldName, &fields)
+			fieldValue, _ := schema.resolve(name, param, typeData.(map[string]interface{}), &fieldName, &fields)
 			fields[name] = fieldValue
 		} else {
-			// FILTER OPT
-			_, opt := getFieldTypeData(fields[name].(string))
-			if _, ok := opt["hide"]; ok {
-				fields[name] = nil
+			// FILTERISASI PRIMA
+			modelField := schema.Models[fieldName][name]
+			if modelField != nil {
+				props := modelField.(map[string]interface{})["props"].(map[string]string)
+				if _, ok := props["hide"]; ok {
+					fields[name] = nil
+				}
 			}
 		}
 	}
