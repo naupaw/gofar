@@ -13,6 +13,7 @@ import (
 	"github.com/Rican7/conjson/transform"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"github.com/pedox/gofar/server/module"
 	gschema "github.com/pedox/gofar/server/schema"
 )
 
@@ -23,8 +24,8 @@ type GqlParam struct {
 }
 
 var banner = `
- _____         __
-/ ____|      /  _|
+  _____        __
+ / ____|     /  _|
 | |  __  ___ | |_ ____ __
 | | |_ |/ _ \|  _/ _| __|
 | |__| | (_) | || (_|| |
@@ -36,6 +37,11 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 
+	fmt.Println(banner)
+	fmt.Println("--------------------------------------------")
+	fmt.Println("Load schema.yaml")
+	fmt.Println("--------------------------------------------")
+
 	schemaFile, err := os.Open("schema.yaml")
 	if err != nil {
 		fmt.Println(err)
@@ -46,12 +52,13 @@ func main() {
 	yaml.Unmarshal(byteValue, &schema)
 
 	definePort := fmt.Sprintf(":%d", schema.Port)
+	module.LoadModule(schema.Modules)
 	gqlSchema := schema.Initialize()
 
 	e.Use(middleware.BodyLimit("2M"))
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: "method=${method}, uri=${uri}, status=${status}\n",
-	}))
+	// e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+	// 	Format: "method=${method}, uri=${uri}, status=${status}\n",
+	// }))
 
 	e.GET("/", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]interface{}{
@@ -85,9 +92,6 @@ func main() {
 		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
 	}))
 
-	fmt.Println(banner)
-	fmt.Println("--------------------------------------------")
-	fmt.Println("Using Driver MongoDB")
 	fmt.Println("--------------------------------------------")
 	fmt.Println("GQL Path at", "http://0.0.0.0"+definePort+schema.GraphQL.Path)
 	fmt.Println("Playground Start at", "http://0.0.0.0"+definePort+schema.GraphQL.Playground)

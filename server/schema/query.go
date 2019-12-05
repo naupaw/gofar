@@ -131,7 +131,6 @@ func (schema Schema) preResolver(modelName string, fields map[string]interface{}
 func (schema Schema) makeQueryFields() {
 	for modelName, graphQLField := range schema.GraphQLModels {
 		// Single Node
-		fmt.Println("MM", modelName)
 		schema.queryFields[modelName] = &graphql.Field{
 			Description: modelName + " Single data",
 			Type:        graphQLField,

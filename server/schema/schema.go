@@ -29,6 +29,7 @@ type Schema struct {
 	Name          string           `json:"name"`
 	Version       string           `json:"version"`
 	GraphQL       GraphQLConfig    `json:"graphql" yaml:"graphql"`
+	Modules       []string         `yaml:"modules"`
 	Models        map[string]Model `json:"models"`
 	Port          int              `yaml:"port"`
 	Database      DatabaseConfig   `yaml:"database"`

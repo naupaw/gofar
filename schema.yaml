@@ -4,6 +4,9 @@ port: 3001
 graphql:
   path: /query
   playground: /__playground
+modules:
+  - mysql
+  - auth
 models:
   User:
     email: string `unique:"true" validate:"require,unique"`
