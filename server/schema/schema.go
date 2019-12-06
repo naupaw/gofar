@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/graphql-go/graphql"
+	"github.com/pedox/gofar/server/module"
 )
 
 //GraphQLConfig - GraphQL config
@@ -12,39 +13,62 @@ type GraphQLConfig struct {
 	Playground string
 }
 
-type DatabaseConfig struct {
-	Driver   string
-	Username string
-	Password string
-	Host     string
-	Port     int
-	Name     string
-}
-
 //Model model lists
 type Model map[string]interface{}
 
+type GraphQLModels map[string]*graphql.Object
+
 //Schema - schema
 type Schema struct {
-	Name          string           `json:"name"`
-	Version       string           `json:"version"`
-	GraphQL       GraphQLConfig    `json:"graphql" yaml:"graphql"`
+	Name          string           `yaml:"name"`
+	Version       string           `yaml:"version"`
+	GraphQL       GraphQLConfig    `yaml:"graphql"`
 	Modules       []string         `yaml:"modules"`
-	Models        map[string]Model `json:"models"`
+	Models        map[string]Model `yaml:"models"`
 	Port          int              `yaml:"port"`
-	Database      DatabaseConfig   `yaml:"database"`
+	Debug         bool             `yaml:"debug"`
+	graphQLModels GraphQLModels
 	queryFields   graphql.Fields
-	GraphQLModels map[string]*graphql.Object
 	compiedSchema graphql.Schema
+	loadedModules map[string]module.Module
+}
+
+func (schema Schema) loadModule() {
+	moduleKeys := map[string]module.Module{}
+	listModules := []module.Module{
+		module.NewMYSQLModule(),
+	}
+
+	for _, mod := range listModules {
+		moduleKeys[mod.ModuleName()] = mod
+	}
+
+	for _, name := range schema.Modules {
+		if mod, ok := moduleKeys[name]; ok {
+			if schema.Debug {
+				fmt.Println("> Loaded module", name)
+			}
+			mod.ModuleLoaded()
+			schema.loadedModules[name] = mod
+		}
+	}
+
 }
 
 //Initialize - initialize schema
 func (schema Schema) Initialize() graphql.Schema {
-	schema.GraphQLModels = map[string]*graphql.Object{}
+	schema.graphQLModels = GraphQLModels{}
 	schema.queryFields = graphql.Fields{}
 	schema.compiedSchema = graphql.Schema{}
+	schema.loadedModules = map[string]module.Module{}
 
-	schema.defineSchema()
+	schema.loadModule()
+
+	for name, fields := range schema.Models {
+		if _, ok := schema.graphQLModels[name]; ok == false {
+			schema.makeModel(name, fields)
+		}
+	}
 
 	var graphQLSchema, err = graphql.NewSchema(
 		graphql.SchemaConfig{
@@ -60,18 +84,8 @@ func (schema Schema) Initialize() graphql.Schema {
 	return graphQLSchema
 }
 
-//defineSchema - loop and define models to GraphQL Schema
-func (schema Schema) defineSchema() {
-	for name, fields := range schema.Models {
-		if _, ok := schema.GraphQLModels[name]; ok == false {
-			schema.makeModel(name, fields)
-		}
-	}
-}
-
 //ExecuteQuery execute GraphQL Query
 func ExecuteQuery(query string, variables map[string]interface{}, operationName string, schema graphql.Schema) *graphql.Result {
-
 	result := graphql.Do(graphql.Params{
 		Schema:         schema,
 		RequestString:  query,
@@ -82,4 +96,8 @@ func ExecuteQuery(query string, variables map[string]interface{}, operationName 
 		fmt.Printf("errors: %v", result.Errors)
 	}
 	return result
+}
+
+func (schema Schema) ModuleEvent(mdEvent func()) {
+	// mdEvent()
 }

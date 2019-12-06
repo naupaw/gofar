@@ -1,28 +1,40 @@
 package module
 
 import (
+	"encoding/json"
 	"fmt"
-
-	schm "github.com/pedox/gofar/server/schema"
 )
 
-//DatabaseMYSQL - mysql driver module
-func DatabaseMYSQL() Module {
-	module := Module{}
-	module.name = "mysql"
+//MysqlModule mysql module
+type MysqlModule struct {
+	hostname string
+	username string
+	password string
+}
 
-	module.load = func() {
-		fmt.Println("Mysql Initialized")
+//NewMYSQLModule - mysql driver module
+func NewMYSQLModule() Module {
+	return &MysqlModule{}
+}
+
+//ModuleName module name
+func (m *MysqlModule) ModuleName() string {
+	return "mysql"
+}
+
+func (m *MysqlModule) ModuleLoaded() {
+	// fmt.Println("howddy !")
+}
+
+func (m *MysqlModule) LoadedSchema() {
+
+}
+
+func (m *MysqlModule) CreateModel(modelName string, model map[string]interface{}) {
+	josh, err := json.MarshalIndent(model, " ", "  ")
+	if err != nil {
+		fmt.Println("error model", modelName, err)
+	} else {
+		fmt.Println("model", modelName, string(josh))
 	}
-
-	afterModel := func(schema schm.Schema) {
-	}
-
-	queryExecute := func(schema schm.Schema) {
-	}
-
-	module.afterModel = &afterModel
-	module.queryExecute = &queryExecute
-
-	return module
 }

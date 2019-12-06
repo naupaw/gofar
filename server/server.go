@@ -13,7 +13,6 @@ import (
 	"github.com/Rican7/conjson/transform"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
-	"github.com/pedox/gofar/server/module"
 	gschema "github.com/pedox/gofar/server/schema"
 )
 
@@ -38,9 +37,6 @@ func main() {
 	e.HideBanner = true
 
 	fmt.Println(banner)
-	fmt.Println("--------------------------------------------")
-	fmt.Println("Load schema.yaml")
-	fmt.Println("--------------------------------------------")
 
 	schemaFile, err := os.Open("schema.yaml")
 	if err != nil {
@@ -52,7 +48,7 @@ func main() {
 	yaml.Unmarshal(byteValue, &schema)
 
 	definePort := fmt.Sprintf(":%d", schema.Port)
-	module.LoadModule(schema.Modules)
+
 	gqlSchema := schema.Initialize()
 
 	e.Use(middleware.BodyLimit("2M"))
@@ -66,7 +62,14 @@ func main() {
 		})
 	})
 
-	e.GET(schema.GraphQL.Playground, echo.WrapHandler(gqlGenHandler.Playground("GraphQL playground", schema.GraphQL.Path)))
+	e.GET(
+		schema.GraphQL.Playground,
+		echo.WrapHandler(
+			gqlGenHandler.Playground("GraphQL playground",
+				schema.GraphQL.Path,
+			),
+		),
+	)
 
 	e.POST(schema.GraphQL.Path, func(c echo.Context) (err error) {
 		f := new(GqlParam)

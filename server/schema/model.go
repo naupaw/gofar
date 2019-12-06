@@ -9,7 +9,7 @@ import (
 	tagparser "github.com/moznion/go-struct-custom-tag-parser"
 )
 
-//makeModel - create models from schema.yaml and collected to []GraphQLModels
+//makeModel - create models from schema.yaml and collected to []graphQLModels
 func (schema Schema) makeModel(modelName string, modelFields Model) {
 	fields := graphql.Fields{}
 	gqlType := graphql.NewObject(
@@ -19,12 +19,10 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 		},
 	)
 	// Store to GraphQL Models
-	schema.GraphQLModels[modelName] = gqlType
+	schema.graphQLModels[modelName] = gqlType
 
 	// Automatically add ID fields
-	fields["ID"] = &graphql.Field{
-		Type: schema.getTypeData(modelName, "ID", "string `unique:\"true\"`", nil),
-	}
+	modelFields["ID"] = "string `unique:\"true\"`"
 
 	// Loop trough modelFields
 	for fieldName, typeData := range modelFields {
@@ -43,6 +41,14 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 			}
 		}
 
+		if fieldName[0:2] == "__" {
+			options := map[string]interface{}{}
+			for name, val := range typeData.(map[interface{}]interface{}) {
+				options[name.(string)] = val
+			}
+			modelFields[fieldName] = options
+		}
+
 		if outputTypeData != nil {
 			fields[fieldName] = &graphql.Field{
 				Type: outputTypeData,
@@ -51,7 +57,13 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 
 	}
 
-	log.Println(":: Initialize", modelName)
+	for _, mod := range schema.loadedModules {
+		mod.CreateModel(modelName, schema.Models[modelName])
+	}
+
+	if schema.Debug {
+		log.Println(":: Initialize", modelName)
+	}
 }
 
 func getFieldTypeData(typeData string) (outputType string, props map[string]string) {
@@ -64,32 +76,43 @@ func getFieldTypeData(typeData string) (outputType string, props map[string]stri
 	var res = regex.FindStringSubmatch(typeData)
 
 	if len(res) > 2 {
-		// fmt.Printf("typeData=%s prop=%s\n\n", res[1], res[2])
 		result, err := tagparser.Parse(res[2], true)
 		if err != nil {
 			log.Fatalf("unexpected error has come: %s", err)
 		}
-
-		// for f, prop := range result {
-		// 	fmt.Println(f, prop)
-		// }
 		return res[1], result
 	}
 	return typeData, props
 }
 
-//Get Supported Type Data
-func (schema Schema) getTypeData(modelName string, fieldName string, typeData string, subType *string) graphql.Output {
-
-	typeData, props := getFieldTypeData(typeData)
-	if typeData != "slice" {
-		// fmt
-		//Define typedata and field prop
-		schema.Models[modelName][fieldName] = map[string]interface{}{
-			"type":  typeData,
-			"props": props,
+func (schema Schema) appendSchemaProps(modelName string, fieldName string, typeData string, subType *string) {
+	fields := schema.Models[modelName][fieldName]
+	if reflect.TypeOf(fields).String() == "map[string]interface {}" {
+		f := fields.(map[string]interface{})
+		props := f["props"].(map[string]string)
+		if _, ok := props["relation"]; !ok {
+			props["relation"] = "hasOne"
+		}
+	} else {
+		typeData, props := getFieldTypeData(typeData)
+		if typeData != "slice" {
+			//Define typedata and field prop
+			if subType != nil {
+				if *subType == "_SLICE_" {
+					props["relation"] = "hasMany"
+				}
+			}
+			schema.Models[modelName][fieldName] = map[string]interface{}{
+				"type":  typeData,
+				"props": props,
+			}
 		}
 	}
+}
+
+//Get Supported Type Data
+func (schema Schema) getTypeData(modelName string, fieldName string, typeData string, subType *string) graphql.Output {
+	schema.appendSchemaProps(modelName, fieldName, typeData, subType)
 
 	switch typeData {
 	case "string":
@@ -99,14 +122,17 @@ func (schema Schema) getTypeData(modelName string, fieldName string, typeData st
 	case "datetime":
 		return graphql.DateTime
 	case "slice":
-		return graphql.NewList(schema.getTypeData(modelName, fieldName, *subType, nil))
+		slice := "_SLICE_"
+		return graphql.NewList(schema.getTypeData(modelName, fieldName, *subType, &slice))
 	default:
 		if fields, ok := schema.Models[typeData]; ok {
-			if _, ok := schema.GraphQLModels[typeData]; !ok {
+			if _, ok := schema.graphQLModels[typeData]; !ok {
 				schema.makeModel(typeData, fields)
-				return schema.GraphQLModels[typeData]
+				schema.appendSchemaProps(modelName, fieldName, typeData, subType)
+				return schema.graphQLModels[typeData]
 			}
-			return schema.GraphQLModels[typeData]
+			schema.appendSchemaProps(modelName, fieldName, typeData, subType)
+			return schema.graphQLModels[typeData]
 		}
 		return nil
 	}

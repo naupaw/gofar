@@ -110,7 +110,7 @@ func (schema Schema) preResolver(modelName string, fields map[string]interface{}
 
 	// Run from parent only
 	if parent == true {
-		md := schema.Models[modelName] //\.(map[string]interface{})
+		md := schema.Models[modelName]
 		for _, key := range fieldKeys {
 			if key == "ID" {
 				fields[key] = "string"
@@ -128,57 +128,64 @@ func (schema Schema) preResolver(modelName string, fields map[string]interface{}
 	return fields
 }
 
+func (schema Schema) makeSingleQuery(modelName string, graphQLField *graphql.Object) {
+	schema.queryFields[modelName] = &graphql.Field{
+		Description: modelName + " Single data",
+		Type:        graphQLField,
+		Args: graphql.FieldConfigArgument{
+			"ID": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+		},
+		Resolve: schema.makeResolve(graphQLField),
+	}
+
+}
+
+func (schema Schema) makePagingQuery(modelName string, graphQLField *graphql.Object) {
+	schema.queryFields[modelName+"List"] = &graphql.Field{
+		Description: modelName + " Datasets",
+		Type:        makeFieldList(modelName, graphQLField),
+		Args: graphql.FieldConfigArgument{
+			"page": &graphql.ArgumentConfig{
+				Type: graphql.Int,
+			},
+			"perPage": &graphql.ArgumentConfig{
+				Type: graphql.Int,
+			},
+		},
+		Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
+			dataList := []map[string]interface{}{}
+
+			dataList = append(dataList, map[string]interface{}{
+				"title":   "Judul",
+				"content": "konten di sini",
+			})
+
+			page, _ := p.Args["page"]
+
+			return map[string]interface{}{
+				"page":     page,
+				"lastPage": 1,
+				"total":    10,
+				"perPage":  10,
+				"data":     dataList,
+			}, nil
+		},
+	}
+}
+
 func (schema Schema) makeQueryFields() {
-	for modelName, graphQLField := range schema.GraphQLModels {
+	for modelName, graphQLField := range schema.graphQLModels {
 		// Single Node
-		schema.queryFields[modelName] = &graphql.Field{
-			Description: modelName + " Single data",
-			Type:        graphQLField,
-			Args: graphql.FieldConfigArgument{
-				"ID": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-			},
-			Resolve: schema.makeResolve(graphQLField),
-		}
-
+		schema.makeSingleQuery(modelName, graphQLField)
 		// Paging Node
-		schema.queryFields[modelName+"List"] = &graphql.Field{
-			Description: modelName + " Datasets",
-			Type:        makeFieldList(modelName, graphQLField),
-			Args: graphql.FieldConfigArgument{
-				"page": &graphql.ArgumentConfig{
-					Type: graphql.Int,
-				},
-				"perPage": &graphql.ArgumentConfig{
-					Type: graphql.Int,
-				},
-			},
-			Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
-				dataList := []map[string]interface{}{}
-
-				dataList = append(dataList, map[string]interface{}{
-					"title":   "Judul",
-					"content": "konten di sini",
-				})
-
-				page, _ := p.Args["page"]
-
-				return map[string]interface{}{
-					"page":     page,
-					"lastPage": 1,
-					"total":    10,
-					"perPage":  10,
-					"data":     dataList,
-				}, nil
-			},
-		}
-
+		schema.makePagingQuery(modelName, graphQLField)
 	}
 }
 
 func (schema Schema) makeQuery() *graphql.Object {
-	schema.GraphQLModels["aboutType"] = graphql.NewObject(
+	schema.graphQLModels["aboutType"] = graphql.NewObject(
 		graphql.ObjectConfig{
 			Name: "About",
 			Fields: graphql.Fields{
@@ -194,7 +201,7 @@ func (schema Schema) makeQuery() *graphql.Object {
 
 	schema.queryFields["about"] = &graphql.Field{
 		Description: "Tentang aplikasi ini",
-		Type:        schema.GraphQLModels["aboutType"],
+		Type:        schema.graphQLModels["aboutType"],
 		Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
 			return map[string]interface{}{
 				"version": schema.Version,
