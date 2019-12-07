@@ -112,7 +112,7 @@ func (schema Schema) preResolver(modelName string, fields map[string]interface{}
 	if parent == true {
 		md := schema.Models[modelName]
 		for _, key := range fieldKeys {
-			if key == "ID" {
+			if key == "id" {
 				fields[key] = "string"
 			} else {
 				if _, ok := md[key]; ok {
@@ -133,13 +133,12 @@ func (schema Schema) makeSingleQuery(modelName string, graphQLField *graphql.Obj
 		Description: modelName + " Single data",
 		Type:        graphQLField,
 		Args: graphql.FieldConfigArgument{
-			"ID": &graphql.ArgumentConfig{
+			"id": &graphql.ArgumentConfig{
 				Type: graphql.NewNonNull(graphql.String),
 			},
 		},
 		Resolve: schema.makeResolve(graphQLField),
 	}
-
 }
 
 func (schema Schema) makePagingQuery(modelName string, graphQLField *graphql.Object) {
@@ -175,18 +174,24 @@ func (schema Schema) makePagingQuery(modelName string, graphQLField *graphql.Obj
 	}
 }
 
-func (schema Schema) makeQueryFields() {
+func (schema Schema) makeFields() {
 	for modelName, graphQLField := range schema.graphQLModels {
 		// Single Node
 		schema.makeSingleQuery(modelName, graphQLField)
 		// Paging Node
 		schema.makePagingQuery(modelName, graphQLField)
+		// Create Node
+		schema.makeCreateMutation(modelName, graphQLField)
+		// Edit Node
+		schema.makeEditMutation(modelName, graphQLField)
+		// Delete Node
+		schema.makeDeleteMutation(modelName, graphQLField)
 	}
 }
 
-func (schema Schema) makeQuery() *graphql.Object {
+func (schema Schema) makeOperation() (*graphql.Object, *graphql.Object) {
 
-	schema.makeQueryFields()
+	schema.makeFields()
 
 	schema.graphQLModels["aboutType"] = graphql.NewObject(
 		graphql.ObjectConfig{
@@ -213,10 +218,19 @@ func (schema Schema) makeQuery() *graphql.Object {
 		},
 	}
 
-	return graphql.NewObject(
+	query := graphql.NewObject(
 		graphql.ObjectConfig{
 			Name:   "Query",
 			Fields: schema.queryFields,
 		},
 	)
+
+	mutation := graphql.NewObject(
+		graphql.ObjectConfig{
+			Name:   "Mutation",
+			Fields: schema.mutationFields,
+		},
+	)
+
+	return query, mutation
 }

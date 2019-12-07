@@ -34,17 +34,20 @@ func (schema Schema) resolve(fieldName string, param graphql.ResolveParams, fiel
 		fields = mod.Query(res)
 	}
 
-	for name, resolveType := range fieldSet {
-		if resolveType == resolve.Relation {
-			param.Args["ID"] = fields[name+"_id"]
-			fieldValue, _ := schema.resolve(
-				name,
-				param,
-				fields[name].(map[string]interface{}),
-				&fieldName,
-				&fields,
-			)
-			fields[name] = fieldValue
+	//let's evaluate relation query
+	for name := range fields {
+		if resolveType, ok := fieldSet[name]; ok {
+			if resolveType == resolve.Relation {
+				param.Args["id"] = fields[name+"_id"]
+				fieldValue, _ := schema.resolve(
+					name,
+					param,
+					fields[name].(map[string]interface{}),
+					&fieldName,
+					&fields,
+				)
+				fields[name] = fieldValue
+			}
 		}
 	}
 

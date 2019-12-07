@@ -21,18 +21,19 @@ type GraphQLModels map[string]*graphql.Object
 
 //Schema - schema
 type Schema struct {
-	Name          string                            `yaml:"name"`
-	Version       string                            `yaml:"version"`
-	GraphQL       GraphQLConfig                     `yaml:"graphql"`
-	Modules       map[string]map[string]interface{} `yaml:"modules"`
-	Models        map[string]Model                  `yaml:"models"`
-	Port          int                               `yaml:"port"`
-	Debug         bool                              `yaml:"debug"`
-	models        map[string]model.Model
-	graphQLModels GraphQLModels
-	queryFields   graphql.Fields
-	compiedSchema graphql.Schema
-	loadedModules map[string]module.Module
+	Name           string                            `yaml:"name"`
+	Version        string                            `yaml:"version"`
+	GraphQL        GraphQLConfig                     `yaml:"graphql"`
+	Modules        map[string]map[string]interface{} `yaml:"modules"`
+	Models         map[string]Model                  `yaml:"models"`
+	Port           int                               `yaml:"port"`
+	Debug          bool                              `yaml:"debug"`
+	models         map[string]model.Model
+	graphQLModels  GraphQLModels
+	queryFields    graphql.Fields
+	mutationFields graphql.Fields
+	compiedSchema  graphql.Schema
+	loadedModules  map[string]module.Module
 }
 
 func (schema Schema) loadModule() {
@@ -61,6 +62,7 @@ func (schema Schema) loadModule() {
 func (schema Schema) Initialize() graphql.Schema {
 	schema.graphQLModels = GraphQLModels{}
 	schema.queryFields = graphql.Fields{}
+	schema.mutationFields = graphql.Fields{}
 	schema.compiedSchema = graphql.Schema{}
 	schema.loadedModules = map[string]module.Module{}
 	schema.models = map[string]model.Model{}
@@ -73,10 +75,12 @@ func (schema Schema) Initialize() graphql.Schema {
 		}
 	}
 
+	query, mutation := schema.makeOperation()
+
 	var graphQLSchema, err = graphql.NewSchema(
 		graphql.SchemaConfig{
-			Query: schema.makeQuery(),
-			// Mutation: mutationType,
+			Query:    query,
+			Mutation: mutation,
 		},
 	)
 

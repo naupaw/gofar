@@ -14,7 +14,7 @@ import (
 )
 
 type BaseModel struct {
-	ID        uint `gorm:"primary_key"`
+	id        uint `gorm:"primary_key"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time `sql:"index"`
@@ -155,7 +155,7 @@ func (m *MysqlModule) CreateModel(model model.Model) {
 
 			typeDat := getType(field.Type)
 
-			if name != "ID" {
+			if name != "id" {
 				if rel, ok := field.Props["relation"]; ok {
 					if rel == "hasOne" {
 						insertStatement = createInsertStatement(insertStatement, name+"_id", getType(m.IDDataType()), &dbExtra)
@@ -199,9 +199,11 @@ func (m *MysqlModule) CreateModel(model model.Model) {
 }
 
 func (m *MysqlModule) Query(res resolve.Resolve) map[string]interface{} {
+	pluralize := pluralize.NewClient()
+	tableName := pluralize.Plural(strcase.ToLowerCamel(res.FieldName))
 	field := []string{}
 
-	id, _ := res.Param.Args["ID"].(string)
+	id, _ := res.Param.Args["id"].(string)
 
 	for name, kind := range res.FieldTypes {
 		if kind == resolve.Primitive {
@@ -209,7 +211,22 @@ func (m *MysqlModule) Query(res resolve.Resolve) map[string]interface{} {
 		}
 	}
 
-	fmt.Printf("SELECT %s FROM %s WHERE id = `%s`\n\n", strings.Join(field, ", "), strings.ToLower(res.FieldName), id)
+	sqlRes := make([]interface{}, len(field))
+	err := m.db.QueryRow(
+		fmt.Sprintf(
+			"SELECT %s FROM %s WHERE id = ? LIMIT 1",
+			strings.Join(field, ", "),
+			tableName,
+		),
+		id,
+	).Scan(sqlRes...)
+
+	if err != nil {
+		fmt.Println("err", err)
+		return map[string]interface{}{}
+	}
+
+	fmt.Println("SQLRES", sqlRes)
 
 	//Dummy result
 	res.Fields["username"] = "pedox"

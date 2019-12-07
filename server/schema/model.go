@@ -28,8 +28,8 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 		Fields: map[string]model.Field{},
 	}
 
-	// Automatically add ID fields
-	modelFields["ID"] = "string `unique:\"true\"`"
+	// Automatically add id fields
+	modelFields["id"] = "string `unique:\"true\"`"
 
 	// Loop trough modelFields
 	for fieldName, typeData := range modelFields {
