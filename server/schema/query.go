@@ -45,7 +45,7 @@ func (schema Schema) selectedFieldsFromSelections(p graphql.ResolveParams, field
 		case *ast.Field:
 			if s.SelectionSet == nil {
 				if _, ok := selected[s.Name.Value]; !ok {
-					selected[s.Name.Value] = "-"
+					selected[s.Name.Value] = true
 				}
 			} else {
 				//@todo must have s.Name.Value_id
@@ -71,7 +71,7 @@ func (schema Schema) selectedFieldsFromSelections(p graphql.ResolveParams, field
 		}
 	}
 
-	schema.preResolver(fieldName, selected, p, true)
+	// schema.preResolver(fieldName, selected, p, true)
 
 	if parent == true {
 		// jsn, _ := json.Marshal(selected)
@@ -116,7 +116,7 @@ func (schema Schema) preResolver(modelName string, fields map[string]interface{}
 				fields[key] = "string"
 			} else {
 				if _, ok := md[key]; ok {
-					fields[key] = md[key].(map[string]interface{})["type"].(string)
+					fields[key] = "string"
 				}
 			}
 		}
@@ -185,6 +185,9 @@ func (schema Schema) makeQueryFields() {
 }
 
 func (schema Schema) makeQuery() *graphql.Object {
+
+	schema.makeQueryFields()
+
 	schema.graphQLModels["aboutType"] = graphql.NewObject(
 		graphql.ObjectConfig{
 			Name: "About",
@@ -209,8 +212,6 @@ func (schema Schema) makeQuery() *graphql.Object {
 			}, nil
 		},
 	}
-
-	schema.makeQueryFields()
 
 	return graphql.NewObject(
 		graphql.ObjectConfig{

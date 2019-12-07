@@ -65,6 +65,7 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 
 	}
 
+	//CALL CreateModel
 	for _, mod := range schema.loadedModules {
 		mod.CreateModel(schema.models[modelName])
 	}
@@ -120,12 +121,14 @@ func (schema Schema) getTypeData(modelName string, fieldName string, typeData st
 	typeData = schema.appendSchemaProps(modelName, fieldName, typeData, subType)
 
 	switch typeData {
-	case "string":
+	case "string", "text":
 		return graphql.String
 	case "number":
 		return graphql.Int
 	case "datetime":
 		return graphql.DateTime
+	case "boolean":
+		return graphql.Boolean
 	case "slice":
 		slice := "_SLICE_"
 		return graphql.NewList(schema.getTypeData(modelName, fieldName, *subType, &slice))

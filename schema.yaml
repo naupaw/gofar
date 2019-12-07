@@ -15,36 +15,42 @@ modules:
     model: User
 models:
   User:
-    email: string `types:"unique" validate:"require,unique"`
-    phone: string `types:"unique" validate:"require,unique"`
+    username: string `db:"unique" validate:"require,unique"`
+    # email: string `db:"unique" validate:"require,unique"`
+    # phone: string `db:"unique" validate:"require,unique"`
     password: string `validate:"require,min:10" hide:"true"`
-    role: Role
+    # role: Role
     __options:
       module_auth: true
-  Role:
+  Todo:
     name: string
-    slug: string `types:"unique" validate:"require,unique"`
-    users:
-      - User
-  Song:
-    title: string
-    length: number
-    band: Band
-    album: Album
-  Album:
-    name: string
-    year: number
-    band: Band
-    songs:
-      - Song
-    tags:
-      - string
-  Artist:
-    name: string
-    Band: Band
-  Band:
-    name: string
-    artists:
-      - Artist
-    albums:
-      - Album
+    description: string
+    checked: boolean `db:"default=0"`
+    user: User
+  # Role:
+  #   name: string
+  #   slug: string `db:"unique" validate:"require,unique"`
+  #   users:
+  #     - User
+  # Song:
+  #   title: string
+  #   length: number
+  #   band: Band
+  #   album: Album
+  # Album:
+  #   name: string
+  #   year: number
+  #   band: Band
+  #   songs:
+  #     - Song
+  #   tags:
+  #     - string
+  # Artist:
+  #   name: string
+  #   Band: Band
+  # Band:
+  #   name: string
+  #   artists:
+  #     - Artist
+  #   albums:
+  #     - Album
