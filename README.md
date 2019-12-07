@@ -21,15 +21,15 @@ graphql:
   playground: /__playground
 models:
   User:
-    email: string `unique:"true" validate:"require,unique"`
-    phone: string `unique:"true" validate:"require,unique"`
+    email: string `types:"unique;true" validate:"require,unique"`
+    phone: string `types:"unique;true" validate:"require,unique"`
     password: string `validate:"require,min:10" hide:"true"`
     role: Role
     __options:
       module_auth: true
   Role:
     name: string
-    slug: string `unique:"true" validate:"require,unique"`
+    slug: string `types:"unique;true" validate:"require,unique"`
     users:
       - User
   Song:
