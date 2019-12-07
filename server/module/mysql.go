@@ -1,14 +1,14 @@
 package module
 
 import (
+	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	pluralize "github.com/gertd/go-pluralize"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/iancoleman/strcase"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
-	dynamicstruct "github.com/ompluscator/dynamic-struct"
 	"github.com/pedox/gofar/server/model"
 )
 
@@ -21,7 +21,7 @@ type BaseModel struct {
 
 //MysqlModule mysql module
 type MysqlModule struct {
-	db *gorm.DB
+	db *sql.DB
 }
 
 //NewMYSQLModule - mysql driver module
@@ -44,7 +44,7 @@ func (m *MysqlModule) ModuleLoaded(config map[string]interface{}) {
 		config["database"],
 	)
 
-	db, err := gorm.Open("mysql", mysqlConn)
+	db, err := sql.Open("mysql", mysqlConn)
 	if err != nil {
 		panic(err)
 	}
@@ -59,65 +59,97 @@ func (m *MysqlModule) IDDataType() string {
 	return "string"
 }
 
-func getType(typeData string) interface{} {
+func getType(typeData string) string {
 	switch typeData {
 	case "string":
-		return ""
+		return "VARCHAR(255)"
 	case "number":
-		return 0
+		return "INT"
+	case "TIMESTAMP", "TINYINT", "DATE":
+		return typeData
 	default:
-		return nil
+		return ""
 	}
+}
+
+func createInsertStatement(statements []string, fieldName string, typeDate string) []string {
+	statements = append(
+		statements,
+		fmt.Sprintf(" `%s` %s ", strcase.ToSnake(fieldName), typeDate),
+	)
+	return statements
 }
 
 func (m *MysqlModule) CreateModel(model model.Model) {
 	pluralize := pluralize.NewClient()
 	tableName := pluralize.Plural(strcase.ToLowerCamel(model.Name))
-	instance := dynamicstruct.ExtendStruct(BaseModel{})
 
-	// instance.AddField("ID", m.IDDataType(), `gorm:"primary_key"`)
+	insertStatement := []string{}
+
+	insertStatement = createInsertStatement(insertStatement, "id", getType(m.IDDataType()))
 
 	for name, field := range model.Fields {
-		tag := ""
-		if val, ok := field.Props["types"]; ok {
-			tag = fmt.Sprintf(`gorm:"%s"`, val)
-		}
+		// tag := ""
+		// if val, ok := field.Props["types"]; ok {
+		// 	tag = fmt.Sprintf(`gorm:"%s"`, val)
+		// }
 
-		m.db.DropTableIfExists(tableName)
+		tx, err := m.db.Begin()
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer tx.Rollback()
+
+		stmt, err := tx.Prepare(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", tableName))
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer stmt.Close()
+		stmt.Exec()
+
+		if err := tx.Commit(); err != nil {
+			fmt.Println(err)
+		}
 
 		typeDat := getType(field.Type)
 
 		if name != "ID" {
 			if rel, ok := field.Props["relation"]; ok {
 				if rel == "hasOne" {
-					instance.AddField(
-						strcase.ToCamel(name+"_id"),
-						m.IDDataType(),
-						tag,
-					)
+					insertStatement = createInsertStatement(insertStatement, name+"_id", getType(m.IDDataType()))
 				}
 			} else {
-				if typeDat != nil {
-					instance.AddField(strcase.ToCamel(name), getType(field.Type), tag)
+				if typeDat != "" {
+					insertStatement = createInsertStatement(insertStatement, name, typeDat)
 				}
 			}
 		}
 	}
 
-	modelTypes := instance.Build().New()
+	insertStatement = createInsertStatement(insertStatement, "created_at", "TIMESTAMP")
+	insertStatement = createInsertStatement(insertStatement, "updated_at", "TIMESTAMP")
 
-	m.
-		db.
-		Debug().
-		Table(tableName).CreateTable(modelTypes)
+	sqlInsert := fmt.Sprintf(
+		"CREATE TABLE IF NOT EXISTS `%s` ( %s ) ENGINE=InnoDB DEFAULT CHARSET=latin1",
+		tableName, strings.Join(insertStatement, ","),
+	)
 
-	// fmt.Println(instance)
+	// fmt.Println(sqlInsert)
 
-	// m.db.AutoMigrate()
-	// josh, err := json.MarshalIndent(model, " ", "  ")
-	// if err != nil {
-	// 	fmt.Println("error model", err)
-	// } else {
-	// 	fmt.Println("model", string(josh))
-	// }
+	tx, err := m.db.Begin()
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(sqlInsert)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer stmt.Close()
+	stmt.Exec()
+
+	if err := tx.Commit(); err != nil {
+		fmt.Println(err)
+	}
 }
