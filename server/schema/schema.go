@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/graphql-go/graphql"
+	"github.com/pedox/gofar/server/model"
 	"github.com/pedox/gofar/server/module"
 )
 
@@ -20,13 +21,14 @@ type GraphQLModels map[string]*graphql.Object
 
 //Schema - schema
 type Schema struct {
-	Name          string           `yaml:"name"`
-	Version       string           `yaml:"version"`
-	GraphQL       GraphQLConfig    `yaml:"graphql"`
-	Modules       []string         `yaml:"modules"`
-	Models        map[string]Model `yaml:"models"`
-	Port          int              `yaml:"port"`
-	Debug         bool             `yaml:"debug"`
+	Name          string                            `yaml:"name"`
+	Version       string                            `yaml:"version"`
+	GraphQL       GraphQLConfig                     `yaml:"graphql"`
+	Modules       map[string]map[string]interface{} `yaml:"modules"`
+	Models        map[string]Model                  `yaml:"models"`
+	Port          int                               `yaml:"port"`
+	Debug         bool                              `yaml:"debug"`
+	models        map[string]model.Model
 	graphQLModels GraphQLModels
 	queryFields   graphql.Fields
 	compiedSchema graphql.Schema
@@ -43,12 +45,12 @@ func (schema Schema) loadModule() {
 		moduleKeys[mod.ModuleName()] = mod
 	}
 
-	for _, name := range schema.Modules {
+	for name, config := range schema.Modules {
 		if mod, ok := moduleKeys[name]; ok {
 			if schema.Debug {
 				fmt.Println("> Loaded module", name)
 			}
-			mod.ModuleLoaded()
+			mod.ModuleLoaded(config)
 			schema.loadedModules[name] = mod
 		}
 	}
@@ -61,6 +63,7 @@ func (schema Schema) Initialize() graphql.Schema {
 	schema.queryFields = graphql.Fields{}
 	schema.compiedSchema = graphql.Schema{}
 	schema.loadedModules = map[string]module.Module{}
+	schema.models = map[string]model.Model{}
 
 	schema.loadModule()
 

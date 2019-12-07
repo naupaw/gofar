@@ -7,6 +7,7 @@ import (
 
 	"github.com/graphql-go/graphql"
 	tagparser "github.com/moznion/go-struct-custom-tag-parser"
+	"github.com/pedox/gofar/server/model"
 )
 
 //makeModel - create models from schema.yaml and collected to []graphQLModels
@@ -18,8 +19,14 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 			Fields: fields,
 		},
 	)
+
 	// Store to GraphQL Models
 	schema.graphQLModels[modelName] = gqlType
+	// and store to models to!
+	schema.models[modelName] = model.Model{
+		Name:   modelName,
+		Fields: map[string]model.Field{},
+	}
 
 	// Automatically add ID fields
 	modelFields["ID"] = "string `unique:\"true\"`"
@@ -53,12 +60,13 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 			fields[fieldName] = &graphql.Field{
 				Type: outputTypeData,
 			}
+
 		}
 
 	}
 
 	for _, mod := range schema.loadedModules {
-		mod.CreateModel(modelName, schema.Models[modelName])
+		mod.CreateModel(schema.models[modelName])
 	}
 
 	if schema.Debug {
@@ -85,34 +93,31 @@ func getFieldTypeData(typeData string) (outputType string, props map[string]stri
 	return typeData, props
 }
 
-func (schema Schema) appendSchemaProps(modelName string, fieldName string, typeData string, subType *string) {
-	fields := schema.Models[modelName][fieldName]
-	if reflect.TypeOf(fields).String() == "map[string]interface {}" {
-		f := fields.(map[string]interface{})
-		props := f["props"].(map[string]string)
-		if _, ok := props["relation"]; !ok {
-			props["relation"] = "hasOne"
-		}
-	} else {
-		typeData, props := getFieldTypeData(typeData)
-		if typeData != "slice" {
-			//Define typedata and field prop
-			if subType != nil {
-				if *subType == "_SLICE_" {
-					props["relation"] = "hasMany"
-				}
+func (schema Schema) appendSchemaProps(modelName string, fieldName string, typeData string, subType *string) string {
+	field := schema.models[modelName].Fields[fieldName]
+
+	typeData, props := getFieldTypeData(typeData)
+	if typeData != "slice" {
+		if subType != nil {
+			if *subType == "_SLICE_" {
+				props["relation"] = "hasMany"
 			}
-			schema.Models[modelName][fieldName] = map[string]interface{}{
-				"type":  typeData,
-				"props": props,
+			if *subType == "_MODEL_" {
+				props["relation"] = "hasOne"
 			}
 		}
+		field.Type = typeData
+		field.Props = props
 	}
+
+	schema.models[modelName].Fields[fieldName] = field
+
+	return typeData
 }
 
 //Get Supported Type Data
 func (schema Schema) getTypeData(modelName string, fieldName string, typeData string, subType *string) graphql.Output {
-	schema.appendSchemaProps(modelName, fieldName, typeData, subType)
+	typeData = schema.appendSchemaProps(modelName, fieldName, typeData, subType)
 
 	switch typeData {
 	case "string":
@@ -125,6 +130,12 @@ func (schema Schema) getTypeData(modelName string, fieldName string, typeData st
 		slice := "_SLICE_"
 		return graphql.NewList(schema.getTypeData(modelName, fieldName, *subType, &slice))
 	default:
+
+		if subType == nil {
+			model := "_MODEL_"
+			subType = &model
+		}
+
 		if fields, ok := schema.Models[typeData]; ok {
 			if _, ok := schema.graphQLModels[typeData]; !ok {
 				schema.makeModel(typeData, fields)
