@@ -108,3 +108,64 @@ func ExecuteQuery(query string, variables map[string]interface{}, operationName 
 func (schema Schema) ModuleEvent(mdEvent func()) {
 	// mdEvent()
 }
+
+func (schema Schema) makeFields() {
+	for modelName, graphQLField := range schema.graphQLModels {
+		// Single Node
+		schema.makeSingleQuery(modelName, graphQLField)
+		// Paging Node
+		schema.makePagingQuery(modelName, graphQLField)
+		// Create Node
+		schema.makeCreateMutation(modelName, graphQLField)
+		// Update Node
+		schema.makeUpdateMutation(modelName, graphQLField)
+		// Delete Node
+		schema.makeDeleteMutation(modelName, graphQLField)
+	}
+}
+
+func (schema Schema) makeOperation() (*graphql.Object, *graphql.Object) {
+
+	schema.makeFields()
+
+	schema.graphQLModels["aboutType"] = graphql.NewObject(
+		graphql.ObjectConfig{
+			Name: "About",
+			Fields: graphql.Fields{
+				"version": &graphql.Field{
+					Type: graphql.String,
+				},
+				"name": &graphql.Field{
+					Type: graphql.String,
+				},
+			},
+		},
+	)
+
+	schema.queryFields["about"] = &graphql.Field{
+		Description: "Tentang aplikasi ini",
+		Type:        schema.graphQLModels["aboutType"],
+		Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
+			return map[string]interface{}{
+				"version": schema.Version,
+				"name":    schema.Name,
+			}, nil
+		},
+	}
+
+	query := graphql.NewObject(
+		graphql.ObjectConfig{
+			Name:   "Query",
+			Fields: schema.queryFields,
+		},
+	)
+
+	mutation := graphql.NewObject(
+		graphql.ObjectConfig{
+			Name:   "Mutation",
+			Fields: schema.mutationFields,
+		},
+	)
+
+	return query, mutation
+}

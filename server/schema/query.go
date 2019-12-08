@@ -1,13 +1,11 @@
 package schema
 
 import (
-	"fmt"
 	"reflect"
-
-	ast "github.com/graphql-go/graphql/language/ast"
 
 	"github.com/graphql-go/graphql"
 	"github.com/iancoleman/strcase"
+	"github.com/pedox/gofar/server/resolve"
 )
 
 func makeFieldList(name string, data graphql.Output) graphql.Output {
@@ -36,108 +34,19 @@ func makeFieldList(name string, data graphql.Output) graphql.Output {
 	)
 }
 
-//https://github.com/graphql-go/graphql/issues/157#issuecomment-506439064
-func (schema Schema) selectedFieldsFromSelections(p graphql.ResolveParams, fieldName string, selections []ast.Selection, parent bool) (selected map[string]interface{}, err error) {
-	selected = map[string]interface{}{}
-
-	for _, s := range selections {
-		switch s := s.(type) {
-		case *ast.Field:
-			if s.SelectionSet == nil {
-				if _, ok := selected[s.Name.Value]; !ok {
-					selected[s.Name.Value] = true
-				}
-			} else {
-				//@todo must have s.Name.Value_id
-				selected[s.Name.Value], err = schema.selectedFieldsFromSelections(p, s.Name.Value, s.SelectionSet.Selections, false)
-				if err != nil {
-					return
-				}
-			}
-		case *ast.FragmentSpread:
-			n := s.Name.Value
-			frag, ok := p.Info.Fragments[n]
-			if !ok {
-				err = fmt.Errorf("no fragment found with name %v", n)
-				return
-			}
-			selected[s.Name.Value], err = schema.selectedFieldsFromSelections(p, s.Name.Value, frag.GetSelectionSet().Selections, false)
-			if err != nil {
-				return
-			}
-		default:
-			err = fmt.Errorf("found unexpected selection type %v", s)
-			return
-		}
-	}
-
-	// schema.preResolver(fieldName, selected, p, true)
-
-	if parent == true {
-		// jsn, _ := json.Marshal(selected)
-		// for name := range selected {
-		selected, _ = schema.resolve(fieldName, p, selected, nil, nil)
-		// fmt.Println(string(jsn))
-		// }
-	}
-
-	return
-}
-
-//makeResolve make resolve functions
-func (schema Schema) makeResolve(fields *graphql.Object) graphql.FieldResolveFn {
-	return func(p graphql.ResolveParams) (res interface{}, err error) {
-		fieldASTs := p.Info.FieldASTs
-		if len(fieldASTs) == 0 {
-			return nil, fmt.Errorf("ResolveParams has no fields")
-		}
-		fieldName := fieldASTs[0].Name.Value
-		return schema.selectedFieldsFromSelections(p, fieldName, fieldASTs[0].SelectionSet.Selections, true)
-	}
-}
-
-// Query Resolver
-func (schema Schema) preResolver(modelName string, fields map[string]interface{}, p graphql.ResolveParams, parent bool) map[string]interface{} {
-	fieldKeys := make([]string, 0, len(fields))
-	nestedFields := make([]string, 0, len(fields))
-	for key, typ := range fields {
-		if reflect.TypeOf(typ).String()[0:4] == "map[" {
-			nestedFields = append(nestedFields, key)
-		} else {
-			fieldKeys = append(fieldKeys, key)
-		}
-	}
-
-	// Run from parent only
-	if parent == true {
-		md := schema.Models[modelName]
-		for _, key := range fieldKeys {
-			if key == "id" {
-				fields[key] = "string"
-			} else {
-				if _, ok := md[key]; ok {
-					fields[key] = "string"
-				}
-			}
-		}
-
-		for _, key := range nestedFields {
-			fields[key] = schema.preResolver(key, fields[key].(map[string]interface{}), p, false)
-		}
-	}
-	return fields
-}
-
 func (schema Schema) makeSingleQuery(modelName string, graphQLField *graphql.Object) {
 	schema.queryFields[modelName] = &graphql.Field{
 		Description: modelName + " Single data",
 		Type:        graphQLField,
 		Args: graphql.FieldConfigArgument{
 			"id": &graphql.ArgumentConfig{
-				Type: graphql.NewNonNull(graphql.String),
+				Type: graphql.NewNonNull(graphql.Int),
 			},
 		},
-		Resolve: schema.makeResolve(graphQLField),
+		Resolve: schema.makeResolve(graphQLField, func(param resolve.PreResolveParam) (resolve.ResolveParamResult, error) {
+			result, err := schema.resolveSingleQuery(param)
+			return result, err
+		}),
 	}
 }
 
@@ -174,63 +83,47 @@ func (schema Schema) makePagingQuery(modelName string, graphQLField *graphql.Obj
 	}
 }
 
-func (schema Schema) makeFields() {
-	for modelName, graphQLField := range schema.graphQLModels {
-		// Single Node
-		schema.makeSingleQuery(modelName, graphQLField)
-		// Paging Node
-		schema.makePagingQuery(modelName, graphQLField)
-		// Create Node
-		schema.makeCreateMutation(modelName, graphQLField)
-		// Edit Node
-		schema.makeEditMutation(modelName, graphQLField)
-		// Delete Node
-		schema.makeDeleteMutation(modelName, graphQLField)
-	}
-}
+//resolveSingleQuery resolve for single query execution
+func (schema Schema) resolveSingleQuery(param resolve.PreResolveParam) (resolve.ResolveParamResult, error) {
+	fieldSet := map[string]resolve.ResolveType{}
 
-func (schema Schema) makeOperation() (*graphql.Object, *graphql.Object) {
-
-	schema.makeFields()
-
-	schema.graphQLModels["aboutType"] = graphql.NewObject(
-		graphql.ObjectConfig{
-			Name: "About",
-			Fields: graphql.Fields{
-				"version": &graphql.Field{
-					Type: graphql.String,
-				},
-				"name": &graphql.Field{
-					Type: graphql.String,
-				},
-			},
-		},
-	)
-
-	schema.queryFields["about"] = &graphql.Field{
-		Description: "Tentang aplikasi ini",
-		Type:        schema.graphQLModels["aboutType"],
-		Resolve: func(p graphql.ResolveParams) (res interface{}, err error) {
-			return map[string]interface{}{
-				"version": schema.Version,
-				"name":    schema.Name,
-			}, nil
-		},
+	if _, ok := param.Fields["id"]; !ok {
+		param.Fields["id"] = resolve.Primitive
 	}
 
-	query := graphql.NewObject(
-		graphql.ObjectConfig{
-			Name:   "Query",
-			Fields: schema.queryFields,
-		},
-	)
+	//Pre defined foreign Key
+	for name, typeData := range param.Fields {
+		if reflect.TypeOf(typeData).Kind() == reflect.Map {
+			fieldSet[name] = resolve.Relation
+			fieldSet[name+"_id"] = resolve.Primitive
+		} else {
+			fieldSet[name] = resolve.Primitive
+		}
+	}
 
-	mutation := graphql.NewObject(
-		graphql.ObjectConfig{
-			Name:   "Mutation",
-			Fields: schema.mutationFields,
-		},
-	)
+	for _, mod := range schema.loadedModules {
+		res := resolve.Resolve{
+			Param:      param.Param,
+			FieldName:  param.FieldName,
+			FieldTypes: fieldSet,
+			Fields:     param.Fields,
+		}
+		param.Fields = mod.Query(res)
+	}
 
-	return query, mutation
+	//let's evaluate relation query
+	for name := range param.Fields {
+		if resolveType, ok := fieldSet[name]; ok {
+			if resolveType == resolve.Relation {
+				param.Param.Args["id"] = param.Fields[name+"_id"]
+				param.FieldName = name
+				param.Fields = param.Fields[name].(map[string]interface{})
+				param.ParentFieldName = &param.FieldName
+				param.ParentFields = &param.Fields
+				fieldValue, _ := schema.resolveSingleQuery(param)
+				param.Fields[name] = fieldValue
+			}
+		}
+	}
+	return param.Fields, nil
 }

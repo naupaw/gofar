@@ -15,10 +15,10 @@ modules:
     model: User
 models:
   User:
-    username: string `db:"unique" validate:"require,unique"`
+    username: string `validate:"required,unique"`
     # email: string `db:"unique" validate:"require,unique"`
     # phone: string `db:"unique" validate:"require,unique"`
-    password: string `validate:"require,min:10" hide:"true"`
+    password: string `validate:"required,min:10" hide:"true"`
     # role: Role
     __options:
       module_auth: true

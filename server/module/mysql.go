@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	pluralize "github.com/gertd/go-pluralize"
 	_ "github.com/go-sql-driver/mysql"
@@ -12,13 +11,6 @@ import (
 	"github.com/pedox/gofar/server/model"
 	"github.com/pedox/gofar/server/resolve"
 )
-
-type BaseModel struct {
-	id        uint `gorm:"primary_key"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time `sql:"index"`
-}
 
 //MysqlModule mysql module
 type MysqlModule struct {
@@ -59,7 +51,7 @@ func (m *MysqlModule) LoadedSchema() {
 }
 
 func (m *MysqlModule) IDDataType() string {
-	return "string"
+	return "bigint"
 }
 
 func getType(typeData string) string {
@@ -68,6 +60,8 @@ func getType(typeData string) string {
 		return "VARCHAR(255)"
 	case "number":
 		return "INT"
+	case "bigint":
+		return "BIGINT"
 	case "boolean":
 		return "TINYINT(1) DEFAULT 0"
 	case "text":
@@ -107,14 +101,23 @@ func extractDBExtraWithValue(field string) string {
 //extractDBExtra something like db:"unique;primary_key"
 func extractDBExtra(field model.Field) string {
 	dbExtra := ""
-	if val, ok := field.Props["db"]; ok {
-		for _, v := range strings.Split(val, ";") {
-			switch v {
-			case "unique":
-				dbExtra += "UNIQUE"
-				break
-			default:
-				dbExtra += extractDBExtraWithValue(v)
+	extraRule := map[string]bool{}
+
+	if val, ok := field.Props["validate"]; ok {
+		for _, v := range strings.Split(val, ",") {
+			if _, ok := extraRule[v]; !ok {
+				switch v {
+				case "unique":
+					extraRule[v] = true
+					dbExtra += " UNIQUE"
+					break
+				case "required":
+					extraRule[v] = true
+					dbExtra += " NOT NULL"
+					break
+				default:
+					dbExtra += extractDBExtraWithValue(v)
+				}
 			}
 		}
 	}
@@ -130,8 +133,8 @@ func (m *MysqlModule) CreateModel(model model.Model) {
 
 		insertStatement := []string{}
 
-		primaryKey := "PRIMARY KEY"
-		insertStatement = createInsertStatement(insertStatement, "id", "BINARY(16)", &primaryKey)
+		primaryKey := "UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE PRIMARY KEY"
+		insertStatement = createInsertStatement(insertStatement, "id", "BIGINT", &primaryKey)
 
 		for name, field := range model.Fields {
 			dbExtra := extractDBExtra(field)
@@ -203,7 +206,7 @@ func (m *MysqlModule) Query(res resolve.Resolve) map[string]interface{} {
 	tableName := pluralize.Plural(strcase.ToLowerCamel(res.FieldName))
 	field := []string{}
 
-	id, _ := res.Param.Args["id"].(string)
+	id, _ := res.Param.Args["id"].(int)
 
 	for name, kind := range res.FieldTypes {
 		if kind == resolve.Primitive {
@@ -211,22 +214,37 @@ func (m *MysqlModule) Query(res resolve.Resolve) map[string]interface{} {
 		}
 	}
 
-	sqlRes := make([]interface{}, len(field))
-	err := m.db.QueryRow(
+	fmt.Println("ID", id)
+
+	row := m.db.QueryRow(
 		fmt.Sprintf(
 			"SELECT %s FROM %s WHERE id = ? LIMIT 1",
 			strings.Join(field, ", "),
 			tableName,
 		),
 		id,
-	).Scan(sqlRes...)
+	)
 
-	if err != nil {
+	columns := make([]interface{}, len(field))
+	columnPointers := make([]interface{}, len(field))
+	for i := range columns {
+		columnPointers[i] = &columns[i]
+	}
+
+	if err := row.Scan(columnPointers...); err != nil {
 		fmt.Println("err", err)
 		return map[string]interface{}{}
 	}
 
-	fmt.Println("SQLRES", sqlRes)
+	mx := make(map[string]interface{})
+	for i, name := range field {
+		val := columnPointers[i].(*interface{})
+		mx[name] = *val
+	}
+
+	// a := sqlRes["test".(string)]
+
+	fmt.Println("SQLRES", mx)
 
 	//Dummy result
 	res.Fields["username"] = "pedox"
@@ -234,4 +252,60 @@ func (m *MysqlModule) Query(res resolve.Resolve) map[string]interface{} {
 	res.Fields["user_id"] = "11-22-33-44"
 
 	return res.Fields
+}
+
+func (m *MysqlModule) Create(res resolve.Resolve) map[string]interface{} {
+	pluralize := pluralize.NewClient()
+	tableName := pluralize.Plural(strcase.ToLowerCamel(res.FieldName))
+	fields := []string{}
+	valuesQ := []string{}
+	values := []interface{}{}
+
+	tx, err := m.db.Begin()
+	if err != nil {
+		return nil
+	}
+	defer tx.Rollback()
+
+	for name, val := range res.Param.Args {
+		fields = append(fields, "`"+name+"`")
+		values = append(values, val)
+		valuesQ = append(valuesQ, "?")
+	}
+
+	prepare := fmt.Sprintf(
+		"INSERT INTO %s ( %s ) VALUES ( %s )",
+		tableName,
+		strings.Join(fields, ", "),
+		strings.Join(valuesQ, ", "),
+	)
+
+	fmt.Println(prepare)
+
+	stmt, err := tx.Prepare(prepare)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer stmt.Close()
+
+	exres, err := stmt.Exec(values...)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(exres.LastInsertId())
+
+	if err := tx.Commit(); err != nil {
+		fmt.Println(err)
+	}
+
+	return res.Fields
+}
+
+func (m *MysqlModule) Update(res resolve.Resolve) map[string]interface{} {
+	return nil
+}
+
+func (m *MysqlModule) Delete(res resolve.Resolve) map[string]interface{} {
+	return nil
 }

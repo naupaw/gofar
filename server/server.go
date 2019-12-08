@@ -11,6 +11,7 @@ import (
 	gqlGenHandler "github.com/99designs/gqlgen/handler"
 	"github.com/Rican7/conjson"
 	"github.com/Rican7/conjson/transform"
+	"github.com/common-nighthawk/go-figure"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	gschema "github.com/pedox/gofar/server/schema"
@@ -22,21 +23,12 @@ type GqlParam struct {
 	OperationName string                 `json:"operationName"`
 }
 
-var banner = `
-  _____        __
- / ____|     /  _|
-| |  __  ___ | |_ ____ __
-| | |_ |/ _ \|  _/ _| __|
-| |__| | (_) | || (_|| |
- \_____|\___/|_| \__,|_| v1.0.0
-
-`
-
 func main() {
 	e := echo.New()
 	e.HideBanner = true
 
-	fmt.Println(banner)
+	figure.NewFigure("Gofar", "big", true).Print()
+	fmt.Print("v1.0.0\n\n")
 
 	schemaFile, err := os.Open("schema.yaml")
 	if err != nil {

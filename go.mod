@@ -6,6 +6,7 @@ require (
 	github.com/99designs/gqlgen v0.10.2
 	github.com/Ompluscator/dynamic-struct v1.2.0 // indirect
 	github.com/Rican7/conjson v0.1.0
+	github.com/common-nighthawk/go-figure v0.0.0-20190529165535-67e0ed34491a
 	github.com/denisenkom/go-mssqldb v0.0.0-20191128021309-1d7a30a10f73 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/etgryphon/stringUp v0.0.0-20121020160746-31534ccd8cac // indirect
@@ -25,6 +26,7 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.1+incompatible // indirect
 	github.com/moznion/go-struct-custom-tag-parser v0.0.0-20190105140703-f014962a09f2
 	github.com/ompluscator/dynamic-struct v1.2.0
+	github.com/vektah/gqlparser v1.2.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
 	golang.org/x/net v0.0.0-20191207000613-e7e4b65ae663 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect

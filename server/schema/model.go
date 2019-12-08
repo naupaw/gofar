@@ -29,7 +29,7 @@ func (schema Schema) makeModel(modelName string, modelFields Model) {
 	}
 
 	// Automatically add id fields
-	modelFields["id"] = "string `unique:\"true\"`"
+	modelFields["id"] = "number `unique:\"true\"`"
 
 	// Loop trough modelFields
 	for fieldName, typeData := range modelFields {

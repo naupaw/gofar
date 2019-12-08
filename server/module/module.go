@@ -13,4 +13,7 @@ type Module interface {
 	LoadedSchema()
 	CreateModel(model model.Model)
 	Query(resolve resolve.Resolve) map[string]interface{}
+	Create(resolve resolve.Resolve) map[string]interface{}
+	Update(resolve resolve.Resolve) map[string]interface{}
+	Delete(resolve resolve.Resolve) map[string]interface{}
 }
